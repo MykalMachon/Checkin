@@ -1,5 +1,8 @@
 import { fail } from '@sveltejs/kit';
-import { ADMIN_USERNAME, ADMIN_PASSWORD } from '$env/static/private';
+import { PrismaClient } from '@prisma/client';
+import { compare, hash } from 'bcrypt';
+
+const prisma = new PrismaClient();
 
 export const actions: import('./$types').Actions = {
   default: async ({ cookies, request }) => {
@@ -7,16 +10,31 @@ export const actions: import('./$types').Actions = {
     const username = data.get('username');
     const password = data.get('password');
 
-    // this is bad. don't do this.
-    const adminUsername = ADMIN_USERNAME
-    const adminPassword = ADMIN_PASSWORD;
-
-    if (adminUsername != username && adminPassword != password) {
-      return fail(400, { username: username, status: 'incorrect login' })
+    if (!username || !password) {
+      return fail(422, { status: 'missing username or password' })
     }
 
-    return {
-      status: `correct! you're logged in.`
+    const user = await prisma.user.findFirst({
+      where: {
+        email: username
+      }
+    })
+
+    if (!user) {
+      return fail(200, { status: 'no user exists with that username/email' })
     }
+
+
+
+    const validPass = await compare(password, user.password);
+    console.log(`password is valid ${validPass}`)
+    console.log(await hash(password, 10), user.password)
+
+    if (!validPass) {
+      return fail(422, { status: 'your username or password is wrong. check again.' })
+    }
+
+    // TODO: create a session and send a cookie
+    return { status: `hey ${user.email} your id is ${user.id} and you should be signed in` }
   }
 }
